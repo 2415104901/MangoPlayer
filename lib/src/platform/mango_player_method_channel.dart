@@ -117,6 +117,15 @@ class MethodChannelMangoPlayer extends MangoPlayerPlatform {
   }
 
   @override
+  Future<Map<String, dynamic>?> getPerformanceMetrics() async {
+    final result = await methodChannel.invokeMethod<Map>('getPerformanceMetrics');
+    if (result != null) {
+      return Map<String, dynamic>.from(result);
+    }
+    return null;
+  }
+
+  @override
   Stream<PlaybackEvent> get eventStream {
     _eventStream ??= eventChannel.receiveBroadcastStream().map((dynamic event) {
       final map = Map<String, dynamic>.from(event as Map);

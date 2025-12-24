@@ -65,6 +65,13 @@ abstract class MangoPlayerPlatform extends PlatformInterface {
     throw UnimplementedError('unregisterTexture() has not been implemented.');
   }
 
+  /// 获取性能指标数据
+  /// 
+  /// 返回包含帧率、解码耗时、丢帧数等性能数据的 Map。
+  Future<Map<String, dynamic>?> getPerformanceMetrics() {
+    throw UnimplementedError('getPerformanceMetrics() has not been implemented.');
+  }
+
   Stream<PlaybackEvent> get eventStream {
     throw UnimplementedError('get eventStream has not been implemented.');
   }
