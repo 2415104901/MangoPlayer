@@ -1,0 +1,94 @@
+# Flutter
+.dart_tool/
+.packages
+.pub/
+build/
+ios/.generated/
+packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.env
+.env.*
+!.env.example
+
+# Android
+android/local.properties
+android/.gradle
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/gradle/wrapper/gradle-wrapper.jar
+
+# iOS
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Generated.xcconfig
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+ios/Pods/
+ios/.symlinks/
+ios/ProfileProfile.entitlements
+ios/Runner.xcworkspace/xcuserdata/
+
+# Windows
+windows/flutter/ephemeral/
+windows/runner/resources/
+*.suo
+*.user
+*.pdb
+*.ipch
+*.aps
+*.opensdf
+*.sdf
+*.cachefile
+*.dll
+*.exe
+*.obj
+*.lib
+*.ilk
+*.exp
+*.gch
+*.pch
+
+# macOS
+macos/Flutter/ephemeral/
+macos/Pods/
+macos/.symlinks/
+macos/Runner.xcworkspace/xcuserdata/
+*.DS_Store
+
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Node.js (if used)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Python (if used)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# C++
+*.o
+*.a
+*.so
+*.dylib
+
+# General
+Thumbs.db
+*.tmp
+*.swp
+*.bak
