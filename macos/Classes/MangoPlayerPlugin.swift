@@ -37,6 +37,7 @@ public class MangoPlayerPlugin: NSObject, FlutterPlugin {
     methodChannelHandler?.stopListening()
     eventChannelHandler?.stopListening()
     textureRegistryHandler?.stopListening()
-    playerManager?.release()
+    // Clean up player manager (ARC will handle deallocation)
+    playerManager = nil
   }
 }

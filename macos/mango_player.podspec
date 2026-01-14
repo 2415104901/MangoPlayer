@@ -16,20 +16,27 @@ Uses FFmpeg + VideoToolbox for hardware-accelerated decoding.
   s.author           = { 'MangoPlayer' => 'email@example.com' }
 
   s.source           = { :path => '.' }
-  s.source_files     = 'Classes/**/*.swift'
+  s.source_files     = 'Classes/**/*.{swift,h,m}'
+  s.public_header_files = 'Classes/core/FFmpegDemuxerObjC.h'
+  s.preserve_paths = 'Classes/BridgingHeader.h', 'Classes/FFmpegWrapper.h', 'Classes/core/FFmpegDemuxerObjC.h'
   s.dependency 'FlutterMacOS'
 
   s.platform = :osx, '10.14'
-  s.pod_target_xcconfig = { 
-    'DEFINES_MODULE' => 'YES',
-    'CLANG_ENABLE_MODULES' => 'YES',
-    'SWIFT_OBJC_BRIDGING_HEADER' => '$(PODS_TARGET_SRCROOT)/Classes/BridgingHeader.h'
-  }
   s.swift_version = '5.9'
-  
+
   # Frameworks required for video playback
   s.frameworks = 'Metal', 'MetalKit', 'CoreVideo', 'VideoToolbox', 'AVFoundation', 'CoreMedia'
-  
-  # FFmpeg libraries (users need to provide these)
-  # s.vendored_libraries = 'libs/libavcodec.dylib', 'libs/libavformat.dylib', 'libs/libavutil.dylib', 'libs/libswscale.dylib', 'libs/libswresample.dylib'
+
+  # FFmpeg configuration using system-installed libraries via Homebrew
+  s.xcconfig = {
+    'OTHER_CFLAGS' => '$(inherited) -I/opt/homebrew/Cellar/ffmpeg/8.0.1/include',
+    'OTHER_LDFLAGS' => '$(inherited) -L/opt/homebrew/Cellar/ffmpeg/8.0.1/lib -lavformat -lavcodec -lavutil -lswscale -lswresample',
+  }
+
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'CLANG_ENABLE_MODULES' => 'YES',
+    'OTHER_CFLAGS' => '$(inherited) -I/opt/homebrew/Cellar/ffmpeg/8.0.1/include -fmodules',
+    'OTHER_LDFLAGS' => '$(inherited) -L/opt/homebrew/Cellar/ffmpeg/8.0.1/lib -lavformat -lavcodec -lavutil -lswscale -lswresample -Wl,-rpath,/opt/homebrew/Cellar/ffmpeg/8.0.1/lib',
+  }
 end

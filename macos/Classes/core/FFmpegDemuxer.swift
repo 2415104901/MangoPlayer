@@ -19,116 +19,185 @@ struct PacketInfo {
     let data: Data
 }
 
-/// FFmpeg Demuxer Wrapper
-/// This is a Swift wrapper that would interface with FFmpeg C code via bridging header
+/// FFmpeg Demuxer Wrapper - Uses Objective-C bridge to access libavformat
+/// This Swift wrapper provides clean API while delegating to FFmpegDemuxerObjC
 class FFmpegDemuxerWrapper {
+    // Objective-C wrapper instance (bridges to FFmpeg C API)
+    private var objcDemuxer: FFmpegDemuxerObjC
+    
+    // Cached stream info
+    private var streamInfo: FFmpegStreamInfo?
     private var isOpened: Bool = false
-    private var videoDuration: Int64 = 0
-    private var videoStreamIndex: Int = -1
-    private var audioStreamIndex: Int = -1
-    private var videoWidth: Int = 0
-    private var videoHeight: Int = 0
-    private var videoFrameRate: Double = 30.0
-    private var videoCodecId: Int32 = 0
     
-    // In a real implementation, these would be FFmpeg opaque pointers
-    // private var formatContext: OpaquePointer?
-    // private var videoCodecContext: OpaquePointer?
-    // private var audioCodecContext: OpaquePointer?
+    // Synchronization
+    private let queue = DispatchQueue(label: "com.mangoplayer.ffmpegdemuxer")
     
-    private let queue = DispatchQueue(label: "com.mangoplayer.demuxer")
+    init() {
+        objcDemuxer = FFmpegDemuxerObjC()
+    }
     
+    deinit {
+        close()
+    }
+    
+    /// Open media file and extract stream info
     func open(config: DemuxerConfig) -> Bool {
-        return queue.sync {
-            // In production, this would call FFmpeg's avformat_open_input, etc.
-            // For now, we simulate success for development
-            
-            // Placeholder: would initialize FFmpeg here
-            /*
-            var options: OpaquePointer? = nil
-            
-            // Set headers
-            if !config.headers.isEmpty {
-                var headerString = ""
-                for (key, value) in config.headers {
-                    headerString += "\(key): \(value)\r\n"
-                }
-                av_dict_set(&options, "headers", headerString, 0)
+        return queue.sync { () -> Bool in
+            guard !isOpened else {
+                NSLog("[FFmpegDemuxer] ⚠️ Already opened")
+                return true
             }
             
-            let ret = avformat_open_input(&formatContext, config.uri, nil, &options)
-            if ret < 0 {
+            NSLog("[FFmpegDemuxer] 🔓 Opening: %@", config.uri)
+            
+            // Convert headers to NSDictionary
+            var headersDict: [String: String]? = nil
+            if !config.headers.isEmpty {
+                headersDict = config.headers
+            }
+            
+            // Call Objective-C wrapper
+            let success = objcDemuxer.open(withURI: config.uri, headers: headersDict)
+            
+            if !success {
+                NSLog("[FFmpegDemuxer] ❌ Failed to open")
                 return false
             }
             
-            // Find stream info
-            avformat_find_stream_info(formatContext, nil)
+            // Get stream info
+            guard let info = objcDemuxer.getStreamInfo() else {
+                NSLog("[FFmpegDemuxer] ❌ Failed to get stream info")
+                objcDemuxer.close()
+                return false
+            }
             
-            // Find video/audio streams
-            findStreams()
-            */
-            
+            streamInfo = info
             isOpened = true
-            videoDuration = 0  // Would be set from format context
+            
+            NSLog("[FFmpegDemuxer] ✅ Opened successfully")
+            NSLog("[FFmpegDemuxer] ⏱️ Duration: %lld ms (%.2f s)", info.duration, Double(info.duration) / 1000.0)
+            NSLog("[FFmpegDemuxer] 🎥 Video: %dx%d, %.2f fps, codec: %@", 
+                  info.videoWidth, info.videoHeight, info.videoFrameRate, info.videoCodecName)
+            
+            if info.audioStreamIndex >= 0 {
+                NSLog("[FFmpegDemuxer] 🔊 Audio: %d Hz, %d channels, codec: %@",
+                      info.audioSampleRate, info.audioChannels, info.audioCodecName)
+            }
+            
             return true
         }
     }
     
+    /// Get video duration in milliseconds
+    func getDuration() -> Int64 {
+        return queue.sync {
+            return streamInfo?.duration ?? 0
+        }
+    }
+    
+    /// Get video stream index
+    func getVideoStreamIndex() -> Int {
+        return queue.sync {
+            return Int(streamInfo?.videoStreamIndex ?? -1)
+        }
+    }
+    
+    /// Get audio stream index
+    func getAudioStreamIndex() -> Int {
+        return queue.sync {
+            return Int(streamInfo?.audioStreamIndex ?? -1)
+        }
+    }
+    
+    /// Get video resolution
+    func getVideoSize() -> (width: Int, height: Int) {
+        return queue.sync {
+            let width = Int(streamInfo?.videoWidth ?? 0)
+            let height = Int(streamInfo?.videoHeight ?? 0)
+            return (width, height)
+        }
+    }
+    
+    /// Get video codec ID
+    func getVideoCodecId() -> Int32 {
+        return queue.sync {
+            return streamInfo?.videoCodecId ?? 0
+        }
+    }
+    
+    /// Get video extradata (SPS/PPS for H.264/HEVC)
+    func getVideoExtradata() -> Data? {
+        return queue.sync {
+            return streamInfo?.videoExtradata
+        }
+    }
+    
+    /// Get video codec name
+    func getVideoCodecName() -> String {
+        return queue.sync {
+            return streamInfo?.videoCodecName ?? "unknown"
+        }
+    }
+    
+    /// Get video frame rate
+    func getVideoFrameRate() -> Double {
+        return queue.sync {
+            return streamInfo?.videoFrameRate ?? 30.0
+        }
+    }
+    
+    /// Read next packet
+    func readPacket() -> PacketInfo? {
+        return queue.sync { () -> PacketInfo? in
+            guard isOpened else {
+                return nil
+            }
+            
+            guard let objcPacket = objcDemuxer.readPacket() else {
+                return nil
+            }
+            
+            return PacketInfo(
+                streamIndex: Int(objcPacket.streamIndex),
+                pts: objcPacket.pts,
+                dts: objcPacket.dts,
+                duration: objcPacket.duration,
+                isKeyframe: objcPacket.isKeyframe,
+                isVideo: objcPacket.isVideo,
+                isAudio: objcPacket.isAudio,
+                data: objcPacket.data
+            )
+        }
+    }
+    
+    /// Seek to specific timestamp
+    func seek(toMs timestampMs: Int64) -> Bool {
+        return queue.sync { () -> Bool in
+            guard isOpened else {
+                return false
+            }
+            
+            let success = objcDemuxer.seek(toTimestamp: timestampMs)
+            
+            if !success {
+                NSLog("[FFmpegDemuxer] ❌ Seek failed")
+                return false
+            }
+            
+            NSLog("[FFmpegDemuxer] ✅ Seeked to %lld ms", timestampMs)
+            return true
+        }
+    }
+    
+    /// Close demuxer and release resources
     func close() {
         queue.sync {
-            // Would call avformat_close_input, etc.
-            isOpened = false
+            if isOpened {
+                NSLog("[FFmpegDemuxer] 🔒 Closing demuxer")
+                objcDemuxer.close()
+                streamInfo = nil
+                isOpened = false
+            }
         }
-    }
-    
-    func readPacket() -> PacketInfo? {
-        return queue.sync {
-            guard isOpened else { return nil }
-            
-            // In production, would call av_read_frame
-            // For now, return nil to simulate end of file
-            return nil
-        }
-    }
-    
-    func seek(toPosition position: Int64) -> Bool {
-        return queue.sync {
-            guard isOpened else { return false }
-            
-            // Would call av_seek_frame
-            return true
-        }
-    }
-    
-    func getDuration() -> Int64 {
-        return videoDuration
-    }
-    
-    func getVideoWidth() -> Int {
-        return videoWidth
-    }
-    
-    func getVideoHeight() -> Int {
-        return videoHeight
-    }
-    
-    func getVideoFrameRate() -> Double {
-        return videoFrameRate
-    }
-    
-    func getVideoCodecId() -> Int32 {
-        return videoCodecId
-    }
-    
-    func getVideoStreamIndex() -> Int {
-        return videoStreamIndex
-    }
-    
-    func getAudioStreamIndex() -> Int {
-        return audioStreamIndex
-    }
-    
-    var isOpen: Bool {
-        return isOpened
     }
 }

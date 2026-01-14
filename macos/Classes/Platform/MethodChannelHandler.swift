@@ -1,6 +1,15 @@
 import FlutterMacOS
 import Foundation
 
+/// Logging helper
+func LogInfo(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    let filename = (file as NSString).lastPathComponent
+    let logMessage = "[\(filename):\(line)] \(function): \(message)"
+    print(logMessage)
+    NSLog("%@", logMessage)
+    fflush(stdout)
+}
+
 class MethodChannelHandler: NSObject {
     private var channel: FlutterMethodChannel?
     private let messenger: FlutterBinaryMessenger
@@ -24,17 +33,21 @@ class MethodChannelHandler: NSObject {
     }
     
     private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        LogInfo("📨 Method called: \(call.method)")
+
         switch call.method {
         case "initialize":
             guard let args = call.arguments as? [String: Any],
                   let uri = args["uri"] as? String,
                   let type = args["type"] as? String else {
+                LogInfo("❌ Invalid arguments for initialize")
                 result(FlutterError(code: "invalid_arguments", message: "uri or type is null", details: nil))
                 return
             }
             let headers = args["headers"] as? [String: String]
             let textureId = (args["textureId"] as? NSNumber)?.int64Value
-            
+
+            LogInfo("🎬 initialize - uri: \(uri), type: \(type), textureId: \(String(describing: textureId))")
             playerManager.initialize(uri: uri, type: type, headers: headers, result: result, textureId: textureId)
             
         case "play":
@@ -89,6 +102,7 @@ class MethodChannelHandler: NSObject {
             result(["success": true])
             
         default:
+            LogInfo("⚠️ Unknown method: \(call.method)")
             result(FlutterMethodNotImplemented)
         }
     }

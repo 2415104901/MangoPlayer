@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../platform/mango_player_platform_interface.dart';
+import '../platform/mango_player_method_channel.dart';
 import 'media_source.dart';
 import 'performance_metrics.dart';
 import 'playback_event.dart';
@@ -13,11 +14,17 @@ class MangoPlayerController {
   
   MangoPlayerController({
     this.config = const PlayerConfig(),
-  });
+  }) {
+    // Listen to event stream to update position/duration
+    _eventSubscription = eventStream.listen(_handlePlaybackEvent);
+  }
 
   final _stateController = StreamController<PlayerState>.broadcast();
   final _errorController = StreamController<PlayerError>.broadcast();
   final _performanceController = StreamController<PerformanceMetrics>.broadcast();
+  
+  // Event stream subscription
+  StreamSubscription<PlaybackEvent>? _eventSubscription;
   
   PlayerState _state = PlayerState.idle;
   PlayerState get state => _state;
@@ -53,6 +60,12 @@ class MangoPlayerController {
   int? _textureId;
   int? get textureId => _textureId;
 
+  // Video dimensions
+  double _videoWidth = 0;
+  double _videoHeight = 0;
+  double get videoWidth => _videoWidth;
+  double get videoHeight => _videoHeight;
+
   Future<void> initialize(MediaSource source) async {
     _state = PlayerState.initializing;
     _stateController.add(_state);
@@ -65,6 +78,14 @@ class MangoPlayerController {
       if (duration != null) {
         _duration = duration;
       }
+      
+      // Get video dimensions from platform
+      final platform = MangoPlayerPlatform.instance;
+      if (platform is MethodChannelMangoPlayer) {
+        _videoWidth = platform.videoWidth;
+        _videoHeight = platform.videoHeight;
+      }
+      
       _state = PlayerState.ready;
       _stateController.add(_state);
       
@@ -113,6 +134,34 @@ class MangoPlayerController {
 
   Future<void> setPlaybackSpeed(double speed) async {
     await MangoPlayerPlatform.instance.setPlaybackSpeed(speed);
+  }
+
+  /// Handle playback events from native layer
+  void _handlePlaybackEvent(PlaybackEvent event) {
+    // Update position and duration from progress events
+    // Always update, even if values are zero (valid at start of playback)
+    _position = event.position;
+    if (event.duration != Duration.zero) {
+      _duration = event.duration;
+    }
+
+    assert(() {
+      // Debug log for tracing position/duration updates
+      // (asserts removed in release)
+      // ignore: avoid_print
+      print('🟢 [Controller] onEvent type=${event.state} pos=${_position.inMilliseconds}ms dur=${_duration.inMilliseconds}ms');
+      return true;
+    }());
+    
+    // Update state from state events
+    if (event.state != PlayerState.idle || _state == PlayerState.idle) {
+      // Only update state if it's meaningful (not default idle)
+      if (event.state == PlayerState.completed ||
+          event.state == PlayerState.error) {
+        _state = event.state;
+        _stateController.add(_state);
+      }
+    }
   }
 
   /// 启用性能监控
@@ -179,6 +228,8 @@ class MangoPlayerController {
 
   Future<void> dispose() async {
     _stopPerformanceTimer();
+    await _eventSubscription?.cancel();
+    _eventSubscription = null;
     if (_textureId != null) {
       await MangoPlayerPlatform.instance.unregisterTexture(_textureId!);
       _textureId = null;

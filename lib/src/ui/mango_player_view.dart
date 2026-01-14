@@ -26,9 +26,22 @@ class _MangoPlayerViewState extends State<MangoPlayerView> {
         if (textureId == null) {
           return Container(color: Colors.black);
         }
+        
+        // Get video dimensions for aspect ratio
+        final videoWidth = widget.controller.videoWidth;
+        final videoHeight = widget.controller.videoHeight;
+        final aspectRatio = (videoWidth > 0 && videoHeight > 0)
+            ? videoWidth / videoHeight
+            : 16.0 / 9.0; // Default aspect ratio
+        
         return Container(
           color: Colors.black,
-          child: Texture(textureId: textureId),
+          child: Center(
+            child: AspectRatio(
+              aspectRatio: aspectRatio,
+              child: Texture(textureId: textureId),
+            ),
+          ),
         );
       },
     );

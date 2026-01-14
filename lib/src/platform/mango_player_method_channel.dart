@@ -22,6 +22,11 @@ class MethodChannelMangoPlayer extends MangoPlayerPlatform {
 
   @override
   Future<Duration?> initialize(MediaSource source, {int? textureId}) async {
+    debugPrint('🎬 [Dart] MethodChannelMangoPlayer.initialize called');
+    debugPrint('   URI: ${source.uri}');
+    debugPrint('   Type: ${source.type.name}');
+    debugPrint('   TextureId: $textureId');
+    
     final Map<String, dynamic> args = {
       'uri': source.uri.toString(),
       'type': source.type.name,
@@ -36,12 +41,33 @@ class MethodChannelMangoPlayer extends MangoPlayerPlatform {
       args['textureId'] = textureId;
     }
 
+    debugPrint('📤 [Dart] Invoking method channel with args: $args');
     final result = await methodChannel.invokeMethod<Map>('initialize', args);
-    if (result != null && result['duration'] != null) {
-      return Duration(milliseconds: result['duration'] as int);
+    debugPrint('📥 [Dart] Method channel result: $result');
+    
+    if (result != null) {
+      final durationMs = result['duration'] as int?;
+      final width = result['width'] as int?;
+      final height = result['height'] as int?;
+      debugPrint('✅ [Dart] Duration: ${durationMs}ms, Size: ${width}x$height');
+      
+      // Store video dimensions for later retrieval
+      _videoWidth = width?.toDouble() ?? 0;
+      _videoHeight = height?.toDouble() ?? 0;
+      
+      if (durationMs != null) {
+        return Duration(milliseconds: durationMs);
+      }
     }
+    debugPrint('⚠️ [Dart] No duration in result');
     return null;
   }
+  
+  // Video dimensions from last initialize call
+  double _videoWidth = 0;
+  double _videoHeight = 0;
+  double get videoWidth => _videoWidth;
+  double get videoHeight => _videoHeight;
 
   @override
   Future<void> play() async {
@@ -130,6 +156,10 @@ class MethodChannelMangoPlayer extends MangoPlayerPlatform {
     _eventStream ??= eventChannel.receiveBroadcastStream().map((dynamic event) {
       final map = Map<String, dynamic>.from(event as Map);
       final type = map['type'] as String;
+
+      if (kDebugMode) {
+        debugPrint('🟢 [Dart] Event from native: $map');
+      }
       
       // Default values
       var position = Duration.zero;
@@ -146,6 +176,9 @@ class MethodChannelMangoPlayer extends MangoPlayerPlatform {
       } else if (type == 'state') {
         final stateStr = map['state'] as String;
         state = PlayerState.values.firstWhere((e) => e.name == stateStr, orElse: () => PlayerState.error);
+      }
+      if (kDebugMode && type == 'progress') {
+        debugPrint('🟢 [Dart] Mapped progress -> pos: ${position.inMilliseconds}ms, dur: ${duration.inMilliseconds}ms');
       }
       
       return PlaybackEvent(
