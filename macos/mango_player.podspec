@@ -17,8 +17,8 @@ Uses FFmpeg + VideoToolbox for hardware-accelerated decoding.
 
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*.{swift,h,m}'
-  s.public_header_files = 'Classes/core/FFmpegDemuxerObjC.h'
-  s.preserve_paths = 'Classes/BridgingHeader.h', 'Classes/FFmpegWrapper.h', 'Classes/core/FFmpegDemuxerObjC.h'
+  s.public_header_files = 'Classes/core/FFmpegDemuxerObjC.h', 'Classes/core/FFmpegAudioDecoderObjC.h'
+  s.preserve_paths = 'Classes/BridgingHeader.h', 'Classes/FFmpegWrapper.h', 'Classes/core/FFmpegDemuxerObjC.h', 'Classes/core/FFmpegAudioDecoderObjC.h'
   s.dependency 'FlutterMacOS'
 
   s.platform = :osx, '10.14'

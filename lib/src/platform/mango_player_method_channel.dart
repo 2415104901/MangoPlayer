@@ -101,6 +101,20 @@ class MethodChannelMangoPlayer extends MangoPlayerPlatform {
   }
 
   @override
+  Future<void> setMuted(bool muted) async {
+    await methodChannel.invokeMethod<void>('setMuted', {'muted': muted});
+  }
+
+  @override
+  Future<bool> getMuted() async {
+    final result = await methodChannel.invokeMethod<Map>('getMuted');
+    if (result != null && result['muted'] != null) {
+      return result['muted'] as bool;
+    }
+    return false;
+  }
+
+  @override
   Future<void> setPlaybackSpeed(double speed) async {
     await methodChannel.invokeMethod<void>('setPlaybackSpeed', {'speed': speed});
   }

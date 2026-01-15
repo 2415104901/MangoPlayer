@@ -20,6 +20,7 @@ class FFmpegPlayerManager: NSObject {
     private var duration: Int64 = 0
     private var position: Int64 = 0
     private var volume: Float = 1.0
+    private var isMuted: Bool = false
     private var playbackSpeed: Float = 1.0
     private var videoWidth: Int = 0
     private var videoHeight: Int = 0
@@ -197,12 +198,29 @@ class FFmpegPlayerManager: NSObject {
                 }
             }
             
-            // Step 4: Create audio decoder
-            self.audioDecoder = FFmpegAudioDecoder()
-            self.audioDecoder?.setAudioCallback { [weak self] audioData, pts in
-                self?.onAudioFrame(audioData: audioData, pts: pts)
+            // Step 4: Create and configure audio decoder
+            if let demuxer = self.demuxer, demuxer.hasAudioStream() {
+                let audioCodecId = demuxer.getAudioCodecId()
+                let audioSampleRate = demuxer.getAudioSampleRate()
+                let audioChannels = demuxer.getAudioChannels()
+                let audioCodecName = demuxer.getAudioCodecName()
+                
+                Log.info("Audio stream found - codec: \(audioCodecName) (ID: \(audioCodecId)), \(audioSampleRate)Hz, \(audioChannels)ch")
+                
+                self.audioDecoder = FFmpegAudioDecoder()
+                self.audioDecoder?.configure(
+                    sampleRate: audioSampleRate,
+                    channels: audioChannels,
+                    codecId: audioCodecId,
+                    extradata: nil  // AAC extradata could be added if available
+                )
+                self.audioDecoder?.setAudioCallback { [weak self] audioData, pts, sampleCount in
+                    self?.onAudioFrame(audioData: audioData, pts: pts, sampleCount: sampleCount)
+                }
+                Log.info("Audio decoder created and configured")
+            } else {
+                Log.info("No audio stream found")
             }
-            Log.info("Audio decoder created")
             
             // Step 5: Set up texture renderer if texture ID provided
             if let tid = textureId, let handler = self.textureRegistryHandler {
@@ -316,7 +334,12 @@ class FFmpegPlayerManager: NSObject {
         }
         
         stopProgressTimer()
+        
+        // Stop audio playback
         audioPlayerNode?.stop()
+        
+        // Flush audio buffers to prevent stale audio on next play
+        audioDecoder?.flush()
         
         clockSync?.reset()
         position = 0
@@ -331,7 +354,12 @@ class FFmpegPlayerManager: NSObject {
         
         updateState("idle")
         
-        Log.info("Stopped")
+        // Clear texture to black - do this on main thread after state update
+        DispatchQueue.main.async { [weak self] in
+            self?.textureRenderer?.clear()
+        }
+        
+        Log.info("Stopped - decoding loop exited: \(!decodingLoopActive)")
     }
     
     /// Seek to specific position
@@ -361,8 +389,24 @@ class FFmpegPlayerManager: NSObject {
     /// - Parameter volume: Volume (0.0 - 1.0)
     func setVolume(volume: Float) {
         self.volume = max(0.0, min(1.0, volume))
-        // Apply to audio mixer
-        audioEngine?.mainMixerNode.outputVolume = self.volume
+        // Apply volume if not muted
+        if !isMuted {
+            audioEngine?.mainMixerNode.outputVolume = self.volume
+        }
+        Log.info("Volume set to \(self.volume)")
+    }
+    
+    /// Set muted state
+    /// - Parameter muted: true to mute, false to unmute
+    func setMuted(muted: Bool) {
+        self.isMuted = muted
+        audioEngine?.mainMixerNode.outputVolume = muted ? 0.0 : self.volume
+        Log.info("Muted: \(muted)")
+    }
+    
+    /// Get current muted state
+    func getMuted() -> Bool {
+        return isMuted
     }
     
     /// Set playback speed
@@ -572,16 +616,36 @@ class FFmpegPlayerManager: NSObject {
     /// - Parameters:
     ///   - audioData: Decoded PCM audio data
     ///   - pts: Presentation timestamp in milliseconds
-    private func onAudioFrame(audioData: Data, pts: Int64) {
-        guard let playerNode = audioPlayerNode,
-              let format = audioFormat else { return }
+    ///   - sampleCount: Number of samples in the audio data
+    private func onAudioFrame(audioData: Data, pts: Int64, sampleCount: Int) {
+        guard let engine = audioEngine,
+              let playerNode = audioPlayerNode,
+              let format = audioFormat else {
+            Log.warning("onAudioFrame: audioEngine, playerNode or format is nil")
+            return
+        }
         
-        // Convert Data to AVAudioPCMBuffer
-        let frameCount = UInt32(audioData.count) / (format.streamDescription.pointee.mBytesPerFrame)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
+        // Ensure audio engine is running
+        if !engine.isRunning {
+            do {
+                try engine.start()
+                Log.debug("Audio engine started in onAudioFrame")
+            } catch {
+                Log.error("Failed to start audio engine: \(error.localizedDescription)")
+                return
+            }
+        }
+        
+        // Convert Data to AVAudioPCMBuffer using actual sample count
+        let frameCount = UInt32(sampleCount)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            Log.warning("Failed to allocate AVAudioPCMBuffer")
+            return
+        }
         
         buffer.frameLength = frameCount
         
+        // Copy audio data with volume scaling
         audioData.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
             if let floatData = buffer.floatChannelData {
                 let srcPtr = bytes.bindMemory(to: Float.self)
@@ -595,6 +659,12 @@ class FFmpegPlayerManager: NSObject {
         
         // Schedule buffer for playback
         playerNode.scheduleBuffer(buffer, completionHandler: nil)
+        
+        // Ensure player node is running
+        if !playerNode.isPlaying {
+            playerNode.play()
+            Log.debug("Audio player node started playing")
+        }
     }
     
     /// Update player state and notify Flutter

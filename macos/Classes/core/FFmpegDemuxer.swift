@@ -146,6 +146,41 @@ class FFmpegDemuxerWrapper {
         }
     }
     
+    /// Get audio codec ID
+    func getAudioCodecId() -> Int32 {
+        return queue.sync {
+            return streamInfo?.audioCodecId ?? 0
+        }
+    }
+    
+    /// Get audio sample rate
+    func getAudioSampleRate() -> Int {
+        return queue.sync {
+            return Int(streamInfo?.audioSampleRate ?? 44100)
+        }
+    }
+    
+    /// Get audio channels
+    func getAudioChannels() -> Int {
+        return queue.sync {
+            return Int(streamInfo?.audioChannels ?? 2)
+        }
+    }
+    
+    /// Get audio codec name
+    func getAudioCodecName() -> String {
+        return queue.sync {
+            return streamInfo?.audioCodecName ?? "unknown"
+        }
+    }
+    
+    /// Check if audio stream exists
+    func hasAudioStream() -> Bool {
+        return queue.sync {
+            return (streamInfo?.audioStreamIndex ?? -1) >= 0
+        }
+    }
+    
     /// Read next packet
     func readPacket() -> PacketInfo? {
         return queue.sync { () -> PacketInfo? in

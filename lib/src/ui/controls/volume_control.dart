@@ -80,10 +80,12 @@ class _VolumeControlState extends State<VolumeControl> {
       } else {
         _previousVolume = _volume;
         _isMuted = true;
-        _volume = 0;
       }
     });
-    widget.controller.setVolume(_volume);
+    widget.controller.setMuted(_isMuted);
+    if (!_isMuted) {
+      widget.controller.setVolume(_volume);
+    }
   }
 
   void _onVolumeChanged(double value) {
@@ -91,6 +93,7 @@ class _VolumeControlState extends State<VolumeControl> {
       _volume = value.clamp(0.0, 1.0);
       _isMuted = _volume == 0;
     });
+    widget.controller.setMuted(_isMuted);
     widget.controller.setVolume(_volume);
   }
 

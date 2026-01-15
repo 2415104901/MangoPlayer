@@ -132,6 +132,14 @@ class MangoPlayerController {
     await MangoPlayerPlatform.instance.setVolume(volume);
   }
 
+  Future<void> setMuted(bool muted) async {
+    await MangoPlayerPlatform.instance.setMuted(muted);
+  }
+
+  Future<bool> getMuted() async {
+    return await MangoPlayerPlatform.instance.getMuted();
+  }
+
   Future<void> setPlaybackSpeed(double speed) async {
     await MangoPlayerPlatform.instance.setPlaybackSpeed(speed);
   }

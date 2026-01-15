@@ -85,6 +85,60 @@ class MetalTextureRenderer: NSObject, FlutterTexture {
     
     // MARK: - Cleanup
     
+    /// Clear the texture with a black frame
+    func clear() {
+        print("[MetalTextureRenderer] clear() called - width: \(width), height: \(height)")
+        
+        // Use stored dimensions or default
+        let clearWidth = width > 0 ? width : 1920
+        let clearHeight = height > 0 ? height : 1080
+        
+        var pixelBuffer: CVPixelBuffer?
+        let attrs: [String: Any] = [
+            kCVPixelBufferMetalCompatibilityKey as String: true,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:]
+        ]
+        
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            clearWidth,
+            clearHeight,
+            kCVPixelFormatType_32BGRA,
+            attrs as CFDictionary,
+            &pixelBuffer
+        )
+        
+        if status == kCVReturnSuccess, let buffer = pixelBuffer {
+            // Fill with black (all zeros)
+            CVPixelBufferLockBaseAddress(buffer, [])
+            if let baseAddress = CVPixelBufferGetBaseAddress(buffer) {
+                let bytesPerRow = CVPixelBufferGetBytesPerRow(buffer)
+                memset(baseAddress, 0, bytesPerRow * clearHeight)
+            }
+            CVPixelBufferUnlockBaseAddress(buffer, [])
+            
+            lock.lock()
+            currentPixelBuffer = buffer
+            lock.unlock()
+            
+            print("[MetalTextureRenderer] Black frame created, notifying Flutter")
+            
+            // Notify Flutter immediately on main thread
+            if Thread.isMainThread {
+                if self.textureId >= 0 {
+                    self.registry.textureFrameAvailable(self.textureId)
+                }
+            } else {
+                DispatchQueue.main.sync { [weak self] in
+                    guard let self = self, self.textureId >= 0 else { return }
+                    self.registry.textureFrameAvailable(self.textureId)
+                }
+            }
+        } else {
+            print("[MetalTextureRenderer] Failed to create black pixel buffer: \(status)")
+        }
+    }
+    
     func dispose() {
         lock.lock()
         currentPixelBuffer = nil

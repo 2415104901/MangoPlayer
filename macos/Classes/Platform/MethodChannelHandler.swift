@@ -80,6 +80,19 @@ class MethodChannelHandler: NSObject {
             playerManager.setVolume(volume: Float(volume))
             result(["success": true])
             
+        case "setMuted":
+            guard let args = call.arguments as? [String: Any],
+                  let muted = args["muted"] as? Bool else {
+                result(FlutterError(code: "invalid_arguments", message: "muted is null", details: nil))
+                return
+            }
+            playerManager.setMuted(muted: muted)
+            result(["success": true, "muted": muted])
+            
+        case "getMuted":
+            let muted = playerManager.getMuted()
+            result(["success": true, "muted": muted])
+            
         case "setPlaybackSpeed":
             guard let args = call.arguments as? [String: Any],
                   let speed = args["speed"] as? Double else {

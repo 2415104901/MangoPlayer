@@ -41,6 +41,14 @@ abstract class MangoPlayerPlatform extends PlatformInterface {
     throw UnimplementedError('setVolume() has not been implemented.');
   }
 
+  Future<void> setMuted(bool muted) {
+    throw UnimplementedError('setMuted() has not been implemented.');
+  }
+
+  Future<bool> getMuted() {
+    throw UnimplementedError('getMuted() has not been implemented.');
+  }
+
   Future<void> setPlaybackSpeed(double speed) {
     throw UnimplementedError('setPlaybackSpeed() has not been implemented.');
   }

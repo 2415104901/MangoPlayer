@@ -20,5 +20,6 @@
 
 // FFmpeg Objective-C Wrappers (safe for Swift)
 #import "core/FFmpegDemuxerObjC.h"
+#import "core/FFmpegAudioDecoderObjC.h"
 
 #endif /* MangoPlayer_BridgingHeader_h */

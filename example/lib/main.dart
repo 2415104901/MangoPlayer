@@ -18,6 +18,7 @@ class _MyAppState extends State<MyApp> {
   VideoSource _currentSource = VideoSource.local;
   String _localFilePath = '';
   String _onlineVideoUrl = 'https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4';
+  bool _isMuted = false;
 
   // Store the scaffold context for dialogs
   GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -312,6 +313,19 @@ class _MyAppState extends State<MyApp> {
                           _controller.stop();
                           _showMessage('Stopped');
                         },
+                      ),
+                      const SizedBox(width: 16),
+                      // Mute button
+                      IconButton.filled(
+                        icon: Icon(_isMuted ? Icons.volume_off : Icons.volume_up),
+                        onPressed: () {
+                          setState(() {
+                            _isMuted = !_isMuted;
+                          });
+                          _controller.setMuted(_isMuted);
+                          _showMessage(_isMuted ? 'Muted' : 'Unmuted');
+                        },
+                        tooltip: _isMuted ? 'Unmute' : 'Mute',
                       ),
                     ],
                   ),
