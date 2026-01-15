@@ -379,9 +379,25 @@ abstract class DecoderProvider {
 - **按平台实现**:
   - 移动端 (Android/iOS): 使用 ijkplayer (内含 FFmpeg 软解 + MediaCodec/VideoToolbox 硬解 + 自动降级)。封装层仅配置选项并桥接事件。
   - 桌面端 (Windows/macOS): 使用 FFmpeg + 平台硬解 (DXVA2/VideoToolbox) 自研管线，封装层提供同样的播放/seek/事件/纹理输出接口。
-- **共享策略**:
-  - 提取 `native_core/` C++ 公共模块（demux、软解、AV 同步、事件桥接），mac/win 复用同一套源码；平台层仅做硬解适配与纹理输出。
-  - macOS 通过 Swift/C++ 混编桥接 `native_core/`；Windows 直接链接 `native_core/`。
+- **共享策略 (✅ 已更新 2026-01-15)**:
+  - **核心原则**: 将 `native_core/` 提升到项目根目录（与 `macos/`, `windows/`, `ios/`, `android/` 同级）
+  - **跨平台模块** (~70% 代码无平台差异):
+    - `native_core/src/demuxer.cpp` - FFmpeg 解复用 (100% 跨平台)
+    - `native_core/src/soft_decoder.cpp` - FFmpeg 软解码 (100% 跨平台)
+    - `native_core/src/clock_sync.cpp` - AV 同步 (100% 跨平台)
+    - `native_core/src/player_core.cpp` - 播放核心逻辑，通过接口调用平台实现
+  - **平台抽象接口** (~25% 代码通过接口隔离):
+    - `native_core/include/interfaces/hw_decoder.h` - 硬解接口 (VideoToolbox/DXVA2/MediaCodec)
+    - `native_core/include/interfaces/texture_output.h` - 纹理输出接口 (Metal/D3D11/OpenGL)
+    - `native_core/include/interfaces/audio_output.h` - 音频输出接口
+  - **平台特定实现** (各平台独立实现接口):
+    - macOS: `macos/Classes/platform/` (VideoToolboxDecoder, MetalTextureOutput)
+    - Windows: `windows/src/platform/` (DXVADecoder, D3D11TextureOutput)
+    - iOS/Android: 如不使用 ijkplayer，可复用 native_core + 平台硬解
+  - **构建集成**:
+    - macOS: 通过 CMake 编译 native_core 为静态库，Swift 通过 C 桥接层调用
+    - Windows: CMake 直接链接 native_core 源码
+    - iOS/Android: 可选集成 (如放弃 ijkplayer 则复用)
 - **澄清**:
   - 移动端不需要自研解码器，解码发生在 ijkplayer 内核；`decoder/` 目录在移动端用于解码配置/监控与事件桥接。
   - 桌面端需要实现解码管线；`core/` 和 `decoder/` 会包含 FFmpeg 软解、硬解适配和同步逻辑。

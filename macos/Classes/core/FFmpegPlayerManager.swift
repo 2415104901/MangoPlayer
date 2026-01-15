@@ -62,6 +62,12 @@ class FFmpegPlayerManager: NSObject {
     private let stateLock = NSLock()
     private var decodingLoopActive: Bool = false
     
+    // MARK: - Seek Control
+    
+    private var pendingSeekPosition: Int64? = nil
+    private let seekLock = NSLock()
+    private var audioSyncPending: Bool = false  // Wait for video to sync audio
+    
     // MARK: - Frame Queue / Backpressure Control
     
     /// Semaphore to limit pending frames in decode pipeline (backpressure)
@@ -365,24 +371,72 @@ class FFmpegPlayerManager: NSObject {
     /// Seek to specific position
     /// - Parameter position: Target position in milliseconds
     func seekTo(position: Int64) {
-        self.position = position
+        Log.info("Seek requested to \(position)ms")
         
-        guard let queue = playbackQueue else { return }
-        queue.async { [weak self] in
-            guard let self = self else { return }
-            
-            // Seek demuxer
-            _ = self.demuxer?.seek(toMs: position)
-            
-            // Flush decoders
-            self.videoDecoder?.flush()
-            self.audioDecoder?.flush()
-            
-            // Update clock
-            self.clockSync?.seek(position)
-            
-            Log.info("Seeked to \(position)ms")
+        // Set pending seek - will be processed in decoding loop
+        seekLock.lock()
+        pendingSeekPosition = position
+        seekLock.unlock()
+        
+        // Update position immediately for UI feedback
+        self.position = position
+    }
+    
+    /// Process pending seek operation (called from decoding loop)
+    private func processPendingSeek() -> Bool {
+        seekLock.lock()
+        guard let seekPos = pendingSeekPosition else {
+            seekLock.unlock()
+            return false
         }
+        pendingSeekPosition = nil
+        seekLock.unlock()
+        
+        Log.info("Processing seek to \(seekPos)ms")
+        
+        // Step 1: Stop audio player
+        audioPlayerNode?.stop()
+        
+        // Step 2: Reset audio engine connection to clear ALL scheduled buffers
+        // This is critical - AVAudioPlayerNode.stop() doesn't clear already-scheduled buffers
+        if let engine = audioEngine, let playerNode = audioPlayerNode, let format = audioFormat {
+            engine.disconnectNodeOutput(playerNode)
+            engine.connect(playerNode, to: engine.mainMixerNode, format: format)
+            Log.debug("Audio engine reconnected to clear buffers")
+        }
+        
+        // Step 3: Seek demuxer
+        let success = demuxer?.seek(toMs: seekPos) ?? false
+        
+        if success {
+            // Step 4: Flush decoders to clear old frames/packets in decoder buffers
+            videoDecoder?.flush()
+            audioDecoder?.flush()
+            
+            // Step 5: Update clock to new position
+            clockSync?.seek(seekPos)
+            
+            // Step 6: Reset frame timing for smooth playback after seek
+            isFirstFrame = true
+            firstFramePts = 0
+            playbackStartTime = 0
+            lastFrameTime = 0
+            
+            // Step 7: Mark that we need to wait for first video frame before playing audio
+            // This ensures audio starts in sync with video
+            audioSyncPending = true
+            
+            // Step 8: Update position for progress UI
+            position = seekPos
+            
+            Log.info("Seek completed to \(seekPos)ms")
+        } else {
+            // Restart audio player even on failure
+            audioPlayerNode?.play()
+            Log.error("Seek failed to \(seekPos)ms")
+        }
+        
+        return true
     }
     
     /// Set volume level
@@ -495,6 +549,12 @@ class FFmpegPlayerManager: NSObject {
                 break
             }
             
+            // Check for pending seek operation
+            if processPendingSeek() {
+                // After seek, continue from new position
+                continue
+            }
+            
             // Handle pause
             if shouldPause {
                 Thread.sleep(forTimeInterval: 0.02)
@@ -576,6 +636,13 @@ class FFmpegPlayerManager: NSObject {
             lastFrameTime = playbackStartTime
             clockSync?.setMasterPts(pts)
             Log.info("First frame - pts: \(pts)ms, playback clock initialized")
+            
+            // Now that video timing is established, start audio playback
+            if audioSyncPending {
+                audioSyncPending = false
+                audioPlayerNode?.play()
+                Log.info("Audio playback resumed after seek sync")
+            }
         }
         
         // Check if paused - if paused, skip this frame (decode loop handles pause)
@@ -623,6 +690,21 @@ class FFmpegPlayerManager: NSObject {
               let format = audioFormat else {
             Log.warning("onAudioFrame: audioEngine, playerNode or format is nil")
             return
+        }
+        
+        // If waiting for video sync after seek, skip audio frames to avoid desync
+        if audioSyncPending {
+            return
+        }
+        
+        // Skip audio frames that are before our current playback position (after seek)
+        // This helps maintain sync by discarding stale audio
+        if !isFirstFrame && firstFramePts > 0 {
+            let relativePts = pts - firstFramePts
+            if relativePts < -100 {  // Allow 100ms tolerance
+                // This audio frame is too old, skip it
+                return
+            }
         }
         
         // Ensure audio engine is running

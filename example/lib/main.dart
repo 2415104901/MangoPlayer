@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mango_player/mango_player.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 
 void main() {
@@ -19,9 +20,10 @@ class _MyAppState extends State<MyApp> {
   String _localFilePath = '';
   String _onlineVideoUrl = 'https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4';
   bool _isMuted = false;
-
-  // Store the scaffold context for dialogs
-  GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _isInitialized = false;
+  bool _isSeeking = false;
+  double _seekValue = 0.0;
+  String _statusMessage = '';
 
   @override
   void initState() {
@@ -59,55 +61,34 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _selectLocalFile() async {
-    final scaffoldContext = _scaffoldKey.currentContext;
-    if (scaffoldContext == null) return;
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.video,
+        allowMultiple: false,
+      );
 
-    final controller = TextEditingController(text: _localFilePath);
-
-    final path = await showDialog<String>(
-      context: scaffoldContext,
-      builder: (context) => AlertDialog(
-        title: const Text('Enter local video path'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: '/Users/xxx/videos/sample.mp4',
-            border: OutlineInputBorder(),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Load'),
-          ),
-        ],
-      ),
-    );
-
-    if (path != null && path.isNotEmpty) {
-      setState(() {
-        _localFilePath = path;
-      });
-      // Don't auto-initialize, let user click the load button
-      _showMessage('File path updated. Click "Load & Play" to play.');
+      if (result != null && result.files.isNotEmpty) {
+        final path = result.files.single.path;
+        if (path != null && path.isNotEmpty) {
+          setState(() {
+            _localFilePath = path;
+          });
+          // 自动加载选中的文件
+          await _initializePlayer();
+        }
+      }
+    } catch (e) {
+      _updateStatus('选择文件失败: $e');
     }
   }
 
   Future<void> _editOnlineUrl() async {
-    final scaffoldContext = _scaffoldKey.currentContext;
-    if (scaffoldContext == null) return;
-
     final controller = TextEditingController(text: _onlineVideoUrl);
 
     final url = await showDialog<String>(
-      context: scaffoldContext,
+      context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Enter online video URL'),
+        title: const Text('输入在线视频URL'),
         content: TextField(
           controller: controller,
           decoration: const InputDecoration(
@@ -119,11 +100,11 @@ class _MyAppState extends State<MyApp> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('取消'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Set URL'),
+            child: const Text('确定'),
           ),
         ],
       ),
@@ -133,7 +114,8 @@ class _MyAppState extends State<MyApp> {
       setState(() {
         _onlineVideoUrl = url;
       });
-      _showMessage('URL updated. Click "Load & Play" to play.');
+      // 自动加载
+      await _initializePlayer();
     }
   }
 
@@ -143,49 +125,55 @@ class _MyAppState extends State<MyApp> {
 
       if (_currentSource == VideoSource.online) {
         source = MediaSource.network(_onlineVideoUrl);
-        _showMessage('Loading online video...');
+        _updateStatus('正在加载在线视频...');
       } else {
         if (_localFilePath.isEmpty) {
-          _showMessage('Please select a local video file first');
+          _updateStatus('请先选择视频文件');
           return;
         }
         source = MediaSource.file(_localFilePath);
-        _showMessage('Loading local video...');
+        _updateStatus('正在加载视频...');
       }
 
       await _controller.initialize(source);
-      _showMessage('Video initialized successfully');
+      setState(() {
+        _isInitialized = true;
+      });
+      _updateStatus('加载成功');
+      // 自动开始播放
+      await _controller.play();
     } catch (e) {
-      _showMessage('Error: $e');
+      _updateStatus('错误: $e');
     }
   }
 
-  void _showMessage(String message) {
-    final scaffoldContext = _scaffoldKey.currentContext;
-    if (scaffoldContext != null && mounted) {
-      ScaffoldMessenger.of(scaffoldContext).hideCurrentSnackBar();
-      ScaffoldMessenger.of(scaffoldContext).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
+  void _updateStatus(String message) {
+    setState(() {
+      _statusMessage = message;
+    });
+    // 3秒后清除状态消息
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && _statusMessage == message) {
+        setState(() {
+          _statusMessage = '';
+        });
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
-        key: _scaffoldKey,
         appBar: AppBar(
           title: const Text('MangoPlayer Demo'),
           backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         ),
         body: Column(
           children: [
-            // Video player
+            // Video player - 增大高度比例
             Expanded(
+              flex: 3, // 增大视频区域比例
               child: Container(
                 color: Colors.black,
                 child: Center(
@@ -196,7 +184,7 @@ class _MyAppState extends State<MyApp> {
                             Icon(Icons.video_library, size: 64, color: Colors.white54),
                             SizedBox(height: 16),
                             Text(
-                              'No video selected',
+                              '未选择视频',
                               style: TextStyle(color: Colors.white54),
                             ),
                           ],
@@ -206,169 +194,231 @@ class _MyAppState extends State<MyApp> {
               ),
             ),
 
-            // Controls
+            // Controls - 紧凑布局，无滚动条
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   // Source selection
                   SegmentedButton<VideoSource>(
-                    segments: const [
-                      ButtonSegment(
-                        value: VideoSource.local,
-                        label: Text('Local File'),
-                        icon: Icon(Icons.folder),
-                      ),
-                      ButtonSegment(
-                        value: VideoSource.online,
-                        label: Text('Online Video'),
-                        icon: Icon(Icons.cloud),
-                      ),
-                    ],
-                    selected: {_currentSource},
-                    onSelectionChanged: (Set<VideoSource> newSelection) {
-                      setState(() {
-                        _currentSource = newSelection.first;
-                      });
-                    },
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // File selection or URL display
-                  if (_currentSource == VideoSource.local)
-                    ListTile(
-                      leading: const Icon(Icons.movie),
-                      title: Text(
-                        _localFilePath.isEmpty
-                            ? 'No file selected'
-                            : _localFilePath.split('/').last,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      subtitle: Text(
-                        _localFilePath.isEmpty
-                            ? 'Click to select a video file'
-                            : _localFilePath,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.folder_open),
-                        onPressed: _selectLocalFile,
-                      ),
-                      onTap: _selectLocalFile,
-                    )
-                  else
-                    ListTile(
-                      leading: const Icon(Icons.link),
-                      title: const Text('Online Video URL'),
-                      subtitle: Text(
-                        _onlineVideoUrl,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: _editOnlineUrl,
-                        tooltip: 'Edit URL',
-                      ),
-                      onTap: _editOnlineUrl,
-                    ),
-
-                  const SizedBox(height: 8),
-
-                  // Initialize button
-                  FilledButton.icon(
-                    onPressed: _initializePlayer,
-                    icon: const Icon(Icons.play_circle_outline),
-                    label: const Text('Load & Play Video'),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Playback controls
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton.filled(
-                        icon: const Icon(Icons.play_arrow),
-                        onPressed: () {
-                          _controller.play();
-                          _showMessage('Playing');
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filled(
-                        icon: const Icon(Icons.pause),
-                        onPressed: () {
-                          _controller.pause();
-                          _showMessage('Paused');
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filled(
-                        icon: const Icon(Icons.stop),
-                        onPressed: () {
-                          _controller.stop();
-                          _showMessage('Stopped');
-                        },
-                      ),
-                      const SizedBox(width: 16),
-                      // Mute button
-                      IconButton.filled(
-                        icon: Icon(_isMuted ? Icons.volume_off : Icons.volume_up),
-                        onPressed: () {
-                          setState(() {
-                            _isMuted = !_isMuted;
-                          });
-                          _controller.setMuted(_isMuted);
-                          _showMessage(_isMuted ? 'Muted' : 'Unmuted');
-                        },
-                        tooltip: _isMuted ? 'Unmute' : 'Mute',
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Progress
-                  StreamBuilder<PlaybackEvent>(
-                    stream: _controller.eventStream,
-                    builder: (context, snapshot) {
-                      final position = snapshot.data?.position ?? Duration.zero;
-                      final duration = snapshot.data?.duration ?? Duration.zero;
-                      final state = snapshot.data?.state ?? PlayerState.idle;
-
-                      // Calculate slider value as a ratio (0.0 to 1.0)
-                      final durationMs = duration.inMilliseconds.toDouble();
-                      final positionMs = position.inMilliseconds.toDouble();
-                      final sliderValue = durationMs > 0
-                          ? (positionMs / durationMs).clamp(0.0, 1.0)
-                          : 0.0;
-
-                      return Column(
-                        children: [
-                          Slider(
-                            value: sliderValue,
-                            onChanged: (value) {
-                              final seekPosition = Duration(
-                                milliseconds: (value * durationMs).toInt(),
-                              );
-                              _controller.seekTo(seekPosition);
-                            },
+                        segments: const [
+                          ButtonSegment(
+                            value: VideoSource.local,
+                            label: Text('本地文件'),
+                            icon: Icon(Icons.folder),
                           ),
-                          Text(
-                            '${_formatDuration(position)} / ${_formatDuration(duration)} | ${state.name}',
-                            style: Theme.of(context).textTheme.bodySmall,
+                          ButtonSegment(
+                            value: VideoSource.online,
+                            label: Text('在线视频'),
+                            icon: Icon(Icons.cloud),
                           ),
                         ],
-                      );
-                    },
+                        selected: {_currentSource},
+                        onSelectionChanged: (Set<VideoSource> newSelection) {
+                          setState(() {
+                            _currentSource = newSelection.first;
+                          });
+                        },
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // File selection or URL display - 紧凑布局
+                      if (_currentSource == VideoSource.local)
+                        Row(
+                          children: [
+                            const Icon(Icons.movie, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _localFilePath.isEmpty
+                                    ? '未选择文件'
+                                    : _localFilePath.split('/').last,
+                                style: Theme.of(context).textTheme.bodyMedium,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            TextButton.icon(
+                              icon: const Icon(Icons.folder_open, size: 18),
+                              label: const Text('选择文件'),
+                              onPressed: _selectLocalFile,
+                            ),
+                          ],
+                        )
+                      else
+                        Row(
+                          children: [
+                            const Icon(Icons.link, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _onlineVideoUrl,
+                                style: Theme.of(context).textTheme.bodySmall,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 18),
+                              onPressed: _editOnlineUrl,
+                              tooltip: '编辑URL',
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.play_circle, size: 18),
+                              onPressed: _initializePlayer,
+                              tooltip: '加载并播放',
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ],
+                        ),
+
+                      const SizedBox(height: 4),
+
+                      // Playback controls
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          IconButton.filled(
+                            icon: const Icon(Icons.play_arrow),
+                            onPressed: () async {
+                              if (!_isInitialized && _localFilePath.isNotEmpty) {
+                                // 如果未初始化但有文件，先初始化
+                                await _initializePlayer();
+                              } else {
+                                await _controller.play();
+                                _updateStatus('播放中');
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.filled(
+                            icon: const Icon(Icons.pause),
+                            onPressed: () {
+                              _controller.pause();
+                              _updateStatus('已暂停');
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.filled(
+                            icon: const Icon(Icons.stop),
+                            onPressed: () {
+                              _controller.stop();
+                              _updateStatus('已停止');
+                            },
+                          ),
+                          const SizedBox(width: 16),
+                          // Mute button
+                          IconButton.filled(
+                            icon: Icon(_isMuted ? Icons.volume_off : Icons.volume_up),
+                            onPressed: () {
+                              setState(() {
+                                _isMuted = !_isMuted;
+                              });
+                              _controller.setMuted(_isMuted);
+                              _updateStatus(_isMuted ? '已静音' : '取消静音');
+                            },
+                            tooltip: _isMuted ? '取消静音' : '静音',
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Progress bar with seek support
+                      StreamBuilder<PlaybackEvent>(
+                        stream: _controller.eventStream,
+                        builder: (context, snapshot) {
+                          final position = snapshot.data?.position ?? Duration.zero;
+                          final duration = snapshot.data?.duration ?? Duration.zero;
+                          final state = snapshot.data?.state ?? PlayerState.idle;
+
+                          // Calculate slider value as a ratio (0.0 to 1.0)
+                          final durationMs = duration.inMilliseconds.toDouble();
+                          final positionMs = position.inMilliseconds.toDouble();
+                          
+                          // 使用seek时的值，否则使用实际位置
+                          final displayValue = _isSeeking 
+                              ? _seekValue 
+                              : (durationMs > 0 ? (positionMs / durationMs).clamp(0.0, 1.0) : 0.0);
+
+                          return Column(
+                            children: [
+                              SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  trackHeight: 4,
+                                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                                ),
+                                child: Slider(
+                                  value: displayValue,
+                                  onChangeStart: (value) {
+                                    setState(() {
+                                      _isSeeking = true;
+                                      _seekValue = value;
+                                    });
+                                  },
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _seekValue = value;
+                                    });
+                                  },
+                                  onChangeEnd: (value) {
+                                    // 执行seek操作
+                                    if (durationMs > 0) {
+                                      final seekPosition = Duration(
+                                        milliseconds: (value * durationMs).toInt(),
+                                      );
+                                      _controller.seekTo(seekPosition);
+                                    }
+                                    setState(() {
+                                      _isSeeking = false;
+                                    });
+                                  },
+                                ),
+                              ),
+                              // 状态和时间显示
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    _formatDuration(_isSeeking 
+                                        ? Duration(milliseconds: (_seekValue * durationMs).toInt())
+                                        : position),
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                  // 状态消息显示在中间
+                                  if (_statusMessage.isNotEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context).colorScheme.primaryContainer,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        _statusMessage,
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Text(
+                                      state.name,
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  Text(
+                                    _formatDuration(duration),
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
           ],
         ),
       ),

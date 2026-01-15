@@ -26,6 +26,34 @@ description: "MangoPlayer 功能实现任务列表"
 
 ---
 
+## 🚨 架构重构任务 (2026-01-15 新增)
+
+**背景**: 原设计要求 `native_core/` C++ 代码在 Windows/macOS 间共享，但实际 macOS 用 ObjC/Swift 重写导致代码重复。现已创建正确的 `native_core/` 架构。
+
+### 已完成的架构更新
+- [x] T-ARCH-001 创建 `native_core/` 根目录结构和 CMakeLists.txt
+- [x] T-ARCH-002 创建跨平台类型定义 `native_core/include/mango_player/types.h`
+- [x] T-ARCH-003 创建平台抽象接口 (`interfaces/hw_decoder.h`, `texture_output.h`, `audio_output.h`)
+- [x] T-ARCH-004 创建跨平台核心头文件 (`demuxer.h`, `soft_decoder.h`, `clock_sync.h`, `event_bridge.h`, `player_core.h`)
+- [x] T-ARCH-005 创建 C 桥接层 `native_core/include/mango_player/c_bridge/mango_player_c.h`
+- [x] T-ARCH-006 实现跨平台源文件 (`src/*.cpp`)
+
+### 待完成的重构任务
+- [ ] T-ARCH-007 macOS: 创建 `VideoToolboxDecoder` 实现 `IHardwareDecoder` 接口
+- [ ] T-ARCH-008 macOS: 创建 `MetalTextureOutput` 实现 `ITextureOutput` 接口
+- [ ] T-ARCH-009 macOS: 创建 `AVAudioEngineOutput` 实现 `IAudioOutput` 接口
+- [ ] T-ARCH-010 macOS: 重构 `FFmpegPlayerManager.swift` 使用 `native_core` C 桥接
+- [ ] T-ARCH-011 Windows: 创建 `DXVADecoder` 实现 `IHardwareDecoder` 接口
+- [ ] T-ARCH-012 Windows: 创建 `D3D11TextureOutput` 实现 `ITextureOutput` 接口
+- [ ] T-ARCH-013 Windows: 创建 `WASAPIAudioOutput` 实现 `IAudioOutput` 接口
+- [ ] T-ARCH-014 Windows: 重构 `FFmpegPlayerManager` 使用共享 `native_core`
+- [ ] T-ARCH-015 删除 macOS 重复代码 (`FFmpegDemuxerObjC.m`, `ClockSync.swift` 等)
+- [ ] T-ARCH-016 删除 Windows 旧 `native_core/` 目录，改用根目录共享版本
+- [ ] T-ARCH-017 更新 macOS `mango_player.podspec` 链接 `native_core` 静态库
+- [ ] T-ARCH-018 更新 Windows `CMakeLists.txt` 链接 `native_core` 静态库
+
+---
+
 ## 阶段 1: 设置(共享基础设施)
 
 **目的**: 项目初始化、依赖配置和基本结构
@@ -103,30 +131,30 @@ description: "MangoPlayer 功能实现任务列表"
 - [x] T029 [P] [US1] 创建 `android/.../platform/MethodChannelHandler.kt` - 处理 Dart → Native 调用
 - [x] T030 [P] [US1] 创建 `android/.../platform/EventChannelHandler.kt` - 推送 Native → Dart 事件
 - [x] T031 [P] [US1] 创建 `android/.../platform/TextureRegistryHandler.kt` - Texture 注册管理
-- [x] T032 [US1] 创建 `android/.../ijkplayer/IJKPlayerWrapper.kt` - 封装 ijkplayer Java 接口
-- [x] T033 [US1] 创建 `android/.../ijkplayer/IJKPlayerManager.kt` - 播放器生命周期管理
-- [x] T034 [US1] 创建 `android/.../ijkplayer/IJKPlayerEventListener.kt` - ijkplayer 事件转换
-- [x] T035 [US1] 创建 `android/.../ijkplayer/IJKSurfaceBridge.kt` - 🔗 ijkplayer → Flutter SurfaceTexture 桥接
+- [ ] T032 [US1] 创建 `android/.../ijkplayer/IJKPlayerWrapper.kt` - ⏳ 骨架代码存在，ijkplayer 集成未验证
+- [ ] T033 [US1] 创建 `android/.../ijkplayer/IJKPlayerManager.kt` - ⏳ 骨架代码存在，功能未验证
+- [ ] T034 [US1] 创建 `android/.../ijkplayer/IJKPlayerEventListener.kt` - ⏳ 未实现，缺失文件
+- [ ] T035 [US1] 创建 `android/.../ijkplayer/IJKSurfaceBridge.kt` - ⏳ 未实现，缺失文件
   - 使用 `IjkMediaPlayer.setSurface(flutterSurface)` 绕过 ijksdl 内部渲染
   - 从 TextureRegistry 创建 SurfaceTexture，生成 Surface 传递给 ijkplayer
-- [x] T036 [US1] 创建 `android/.../renderer/SurfaceTextureRenderer.kt` - External Texture 渲染管理
-- [x] T037 [US1] 集成 ijkplayer 预编译库到 `android/libs/` (ijkplayer-java.aar, libijkplayer.so, libijkffmpeg.so, libijksdl.so)
+- [ ] T036 [US1] 创建 `android/.../renderer/SurfaceTextureRenderer.kt` - ⏳ 未实现，缺失文件
+- [ ] T037 [US1] 集成 ijkplayer 预编译库到 `android/libs/` - ⛔ **未完成**: libs/ 目录无 ijkplayer 库文件
 
 ### iOS 平台实现 (ijkplayer 封装 + Flutter External Texture)
 
 - [x] T038 [US1] 创建 `ios/Classes/MangoPlayerPlugin.swift` - Flutter 插件入口
-- [x] T039 [P] [US1] 创建 `ios/Classes/Platform/MethodChannelHandler.swift` - 处理 Dart → Native 调用
-- [x] T040 [P] [US1] 创建 `ios/Classes/Platform/EventChannelHandler.swift` - 推送 Native → Dart 事件
-- [x] T041 [P] [US1] 创建 `ios/Classes/Platform/TextureRegistryHandler.swift` - Texture 注册管理
-- [x] T042 [US1] 创建 `ios/Classes/IJKPlayer/IJKPlayerWrapper.swift` - 封装 ijkplayer Objective-C 接口
-- [x] T043 [US1] 创建 `ios/Classes/IJKPlayer/IJKPlayerManager.swift` - 播放器生命周期管理
-- [x] T044 [US1] 创建 `ios/Classes/IJKPlayer/IJKPlayerEventBridge.swift` - 事件桥接
-- [x] T045 [US1] 创建 `ios/Classes/IJKPlayer/IJKPixelBufferOutput.swift` - 🔗 ijkplayer → CVPixelBuffer 输出
+- [x] T039 [P] [US1] 创建 `ios/Classes/Platform/MethodChannelHandler.swift` - 处理 Dart → Native 调用 (⚠️ 基于 macOS 模板)
+- [x] T040 [P] [US1] 创建 `ios/Classes/Platform/EventChannelHandler.swift` - 推送 Native → Dart 事件 (⚠️ 基于 macOS 模板)
+- [x] T041 [P] [US1] 创建 `ios/Classes/Platform/TextureRegistryHandler.swift` - Texture 注册管理 (⚠️ 基于 macOS 模板)
+- [ ] T042 [US1] 创建 `ios/Classes/IJKPlayer/IJKPlayerWrapper.swift` - ⏳ 骨架代码存在，ijkplayer 集成未验证
+- [ ] T043 [US1] 创建 `ios/Classes/IJKPlayer/IJKPlayerManager.swift` - ⏳ 骨架代码存在，功能未验证
+- [ ] T044 [US1] 创建 `ios/Classes/IJKPlayer/IJKPlayerEventBridge.swift` - ⛔ **缺失文件**
+- [ ] T045 [US1] 创建 `ios/Classes/IJKPlayer/IJKPixelBufferOutput.swift` - ⛔ **缺失关键实现**
   - 配置 ijkplayer 输出 CVPixelBuffer 而非渲染到 IJKSDLGLView
   - 使用帧回调或 CVPixelBufferPool 拦截获取解码帧
   - 将 CVPixelBuffer 送入 Flutter TextureRegistry
-- [x] T046 [US1] 创建 `ios/Classes/Renderer/CVPixelBufferManager.swift` - CVPixelBuffer 管理与 Flutter Texture 注册
-- [x] T047 [US1] 集成 IJKMediaFramework.framework 到 `ios/Frameworks/`
+- [ ] T046 [US1] 创建 `ios/Classes/Renderer/CVPixelBufferManager.swift` - ⛔ **缺失文件**
+- [ ] T047 [US1] 集成 IJKMediaFramework.framework 到 `ios/Frameworks/` - ⛔ **未完成**: Frameworks/ 目录无 IJKMediaFramework
 
 ### 导出与集成
 
@@ -163,14 +191,14 @@ description: "MangoPlayer 功能实现任务列表"
 - [x] T062 [P] [US2] 创建 `macos/Classes/Platform/MethodChannelHandler.swift` - 处理 Dart → Native 调用
 - [x] T063 [P] [US2] 创建 `macos/Classes/Platform/EventChannelHandler.swift` - 推送 Native → Dart 事件
 - [x] T064 [P] [US2] 创建 `macos/Classes/Platform/TextureRegistryHandler.swift` - Texture 注册管理
-- [x] T065 [US2] 复制 `native_core/` C++ 共用核心到 `macos/Classes/core/native_core/` (与 Windows 共享源码)
-- [x] T066 [US2] 创建 `macos/Classes/core/FFmpegDemuxer.swift` - Swift/C++ 混编桥 (调用 native_core)
-- [x] T067 [US2] 创建 `macos/Classes/core/VideoToolboxDecoder.swift` - VideoToolbox 硬解实现
-- [x] T068 [US2] 创建 `macos/Classes/core/FFmpegSoftDecoder.swift` - 软解回退包装 (Swift 调用 C++)
-- [x] T069 [US2] 创建 `macos/Classes/core/ClockSync.swift` - AV 同步包装
+- [ ] T065 [US2] ⚠️ **架构偏离**: 复制 `native_core/` C++ 共用核心到 `macos/Classes/core/native_core/` - **未实现，改用了 ObjC 重写**
+- [x] T066 [US2] 创建 `macos/Classes/core/FFmpegDemuxer.swift` - ⚠️ **架构偏离**: 实际用 ObjC 实现 (FFmpegDemuxerObjC.m)，未调用共享 C++
+- [x] T067 [US2] 创建 `macos/Classes/core/VideoToolboxDecoder.swift` - VideoToolbox 硬解实现 (在 FFmpegPlayerManager 中)
+- [x] T068 [US2] 创建 `macos/Classes/core/FFmpegSoftDecoder.swift` - ⚠️ **架构偏离**: 实际用 ObjC 实现 (FFmpegAudioDecoderObjC.m)
+- [x] T069 [US2] 创建 `macos/Classes/core/ClockSync.swift` - ⚠️ **架构偏离**: Swift 实现，未调用共享 C++
 - [x] T070 [US2] 创建 `macos/Classes/Renderer/MetalTextureRenderer.swift` - Metal 纹理渲染 → Flutter TextureRegistry
-- [x] T071 [US2] 创建 `macos/Classes/Renderer/CVPixelBufferManager.swift` - CVPixelBuffer 管理
-- [x] T072 [US2] 集成 FFmpeg 库到 `macos/libs/`
+- [x] T071 [US2] 创建 `macos/Classes/Renderer/CVPixelBufferManager.swift` - CVPixelBuffer 管理 (在 MacOSRendererProvider 中)
+- [x] T072 [US2] 集成 FFmpeg 库到 `macos/libs/` - ⚠️ 使用 Homebrew 系统库，未单独集成
 
 ### 跨平台一致性验证
 
@@ -368,6 +396,135 @@ description: "MangoPlayer 功能实现任务列表"
 
 - [x] T140 在 4 个平台运行完整测试套件 (Dart 层 113 测试全部通过)
 - [ ] T141 性能基准测试 (启动 <500ms, 30fps, 内存 <150MB) - 需实际设备测试
+
+---
+
+## 当前项目状态 (2026-01-15)
+
+### ✅ 已完成功能 (macOS 平台)
+
+#### 阶段 1-2: 设置与基础 (T001-T025)
+- [x] 项目结构、依赖配置、Dart 核心模型层全部完成
+- [x] Platform Channel 接口层完成
+
+#### 阶段 3-4: 用户故事 1-2 (macOS 部分)
+- [x] macOS 核心播放功能 (T061-T072)
+  - FFmpeg Demuxer (Objective-C 封装)
+  - VideoToolbox 硬件解码器
+  - FFmpeg 音频解码器（AAC 软解）
+  - AVAudioEngine 音频播放
+  - Metal Texture 零拷贝渲染
+  - 时钟同步 (ClockSync)
+- [x] 播放控制 API (play/pause/stop/seek/volume/mute)
+- [x] 播放状态事件流
+- [x] 进度更新事件流
+
+#### 阶段 5: 用户故事 3 (部分)
+- [x] 基础播放控制按钮
+- [x] 进度条和时间显示
+- [x] 音量控制（包含静音按钮）
+- [ ] 全屏播放功能 (T081)
+- [ ] 视频缩放模式 (T081)
+- [ ] 手势控制
+- [ ] 键盘快捷键（桌面端）
+
+#### 已知问题修复 (本次会话)
+- [x] macOS 音频解码器配置问题（无声音）
+- [x] 静音功能缺失（Native+Dart+UI 三层实现）
+- [x] 停止播放时视频残留（时序+线程问题）
+
+### ⏳ 待完成工作 (按优先级)
+
+#### 🔴 P1: 跨平台一致性验证
+
+**iOS 平台 (T038-T047)**
+- [ ] 验证 ijkplayer 集成和音视频播放
+- [ ] Flutter External Texture 对接 (CVPixelBuffer → TextureRegistry)
+- [ ] 跨平台 API 行为一致性测试
+
+**Android 平台 (T028-T037)**
+- [ ] 验证 ijkplayer 集成和音视频播放
+- [ ] Flutter External Texture 对接 (SurfaceTexture → setSurface())
+- [ ] MediaCodec 硬解支持验证
+
+**Windows 平台 (T050-T060)**
+- [ ] FFmpegPlayerManager 完整实现
+- [ ] DXVA2 硬解集成
+- [ ] Windows Audio Session API (WASAPI) 音频播放
+- [ ] D3D11 Texture → Flutter External Texture
+
+#### 🟡 P2: 功能完善
+
+**US3: 播放控制 UI 增强**
+- [ ] T081 全屏播放组件
+- [ ] 视频缩放模式（适应/填充/裁剪）
+- [ ] 手势控制（双击暂停、滑动调节）
+- [ ] 键盘快捷键（空格暂停、方向键 seek）
+
+**US4: 多格式支持验证**
+- [ ] T083-T086 H.265/HEVC 硬解测试
+- [ ] MKV/AVI 容器兼容性测试
+- [ ] 纯音频文件测试（MP3/FLAC/WAV）
+- [ ] 格式不支持的错误处理
+
+**US5: 网络流媒体支持**
+- [ ] T087-T090 HLS 流播放测试
+- [ ] RTMP 直播流测试
+- [ ] 网络中断重连机制
+- [ ] HTTP Headers 自定义支持
+
+**US6: 模块化扩展示例**
+- [ ] T118 自定义 DataSource 示例（加密媒体）
+- [ ] 自定义 Decoder 配置示例
+- [ ] 自定义 Renderer 示例（滤镜效果）
+
+#### 🟢 P3: 性能与调试
+
+**US7: 性能监控完善**
+- [x] T119-T120 PerformanceMetrics 数据结构和事件流
+- [ ] T124 macOS 性能数据收集实现
+- [ ] T121-T123 其他平台性能数据收集
+- [ ] 帧率统计、解码耗时、内存占用监控
+- [ ] 掉帧日志记录
+
+**性能指标验证 (T141)**
+- [ ] 启动时间 <500ms (本地)
+- [ ] 渲染帧率 ≥30fps (1080p)
+- [ ] 内存占用 <150MB (单实例)
+- [ ] Seek 延迟 <200ms (本地)
+- [ ] 零拷贝效率验证 (内存带宽节省 >50%)
+
+#### 技术债务
+- [ ] **🔴 架构偏离: native_core C++ 复用未实现**
+  - Windows 有 `native_core/` C++ 实现 ✅
+  - macOS 用 Swift/ObjC 重写了相同逻辑 ⛔ (应改为调用共享 C++)
+  - 需要重构: 提取共享 `native_core/` 到项目根目录
+- [ ] macOS FFmpeg 路径硬编码问题（/opt/homebrew/Cellar/ffmpeg/8.0.1）
+- [ ] 多实例播放资源管理测试
+- [ ] Seek 后短暂卡顿优化
+- [ ] 日志系统统一（各平台格式/级别）
+- [ ] 错误码标准化（PlayerErrorCode 完善）
+- [ ] Native 层单元测试补充
+- [ ] 内存管理审计（内存泄漏检测）
+
+---
+
+## 下一步建议
+
+### 短期目标 (1-2 周)
+1. **iOS 平台验证** - 确认 ijkplayer 音视频播放正常 (T038-T047)
+2. **Android 平台验证** - 确认 ijkplayer 音视频播放正常 (T028-T037)
+3. **跨平台一致性测试** - T074 集成测试验证 4 平台 API 行为
+
+### 中期目标 (3-4 周)
+1. **Windows 平台完善** - FFmpeg + DXVA2 + WASAPI (T050-T060)
+2. **全屏播放功能** - T081 桌面端和移动端全屏支持
+3. **流媒体协议测试** - T087-T090 HLS/RTMP/RTSP 验证
+
+### 长期目标 (5-8 周)
+1. **性能基准测试** - T141 全平台性能验证
+2. **模块化扩展示例** - T118 自定义解码器/渲染器文档
+3. **文档完善** - API 文档、扩展开发指南
 
 ---
 
