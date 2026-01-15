@@ -1,0 +1,152 @@
+/**
+ * NativeCorePlayerBridge - Swift wrapper for native_core C bridge
+ * 
+ * This file demonstrates how to use the native_core C bridge from Swift.
+ * It will eventually replace FFmpegPlayerManager.swift
+ */
+
+import Foundation
+import FlutterMacOS
+
+// Import the C bridge header
+// Note: In production, this would be imported via BridgingHeader.h
+// For now, we declare the C functions here for reference
+
+/*
+ C Bridge Functions (from mango_player_c.h):
+ 
+ MangoPlayerRef mango_player_create(
+     MangoHWDecoderRef hw_decoder,
+     MangoTextureOutputRef texture_output,
+     MangoAudioOutputRef audio_output
+ );
+ 
+ void mango_player_destroy(MangoPlayerRef player);
+ bool mango_player_initialize(MangoPlayerRef player, const char* uri, const char* headers, void* texture_registry);
+ void mango_player_play(MangoPlayerRef player);
+ void mango_player_pause(MangoPlayerRef player);
+ void mango_player_stop(MangoPlayerRef player);
+ void mango_player_seek(MangoPlayerRef player, int64_t position_ms);
+ void mango_player_set_volume(MangoPlayerRef player, double volume);
+ void mango_player_set_mute(MangoPlayerRef player, bool mute);
+ int64_t mango_player_get_position(MangoPlayerRef player);
+ int64_t mango_player_get_duration(MangoPlayerRef player);
+ int64_t mango_player_get_texture_id(MangoPlayerRef player);
+ 
+ // Platform-specific factory functions (implemented in our .mm files)
+ void* mango_create_videotoolbox_decoder(void);
+ void* mango_create_metal_texture_output(void);
+ void* mango_create_avaudioengine_output(void);
+ */
+
+/// Swift wrapper for native_core player
+class NativeCorePlayerBridge {
+    
+    // Opaque pointers to native objects
+    private var player: UnsafeMutableRawPointer?
+    private var hwDecoder: UnsafeMutableRawPointer?
+    private var textureOutput: UnsafeMutableRawPointer?
+    private var audioOutput: UnsafeMutableRawPointer?
+    
+    private var textureRegistry: FlutterTextureRegistry?
+    private var eventSink: FlutterEventSink?
+    
+    init() {
+        // Will be initialized when initialize() is called
+    }
+    
+    deinit {
+        destroy()
+    }
+    
+    /// Initialize the player with platform-specific implementations
+    func initialize(uri: String, textureRegistry: FlutterTextureRegistry, eventSink: FlutterEventSink?) -> Bool {
+        self.textureRegistry = textureRegistry
+        self.eventSink = eventSink
+        
+        // Create platform-specific implementations
+        hwDecoder = mango_create_videotoolbox_decoder()
+        textureOutput = mango_create_metal_texture_output()
+        audioOutput = mango_create_avaudioengine_output()
+        
+        // Create player with injected dependencies
+        player = mango_player_create(hwDecoder, textureOutput, audioOutput)
+        
+        guard let player = player else {
+            return false
+        }
+        
+        // Initialize player with URI
+        let cUri = (uri as NSString).utf8String
+        let textureRegistryPtr = Unmanaged.passUnretained(textureRegistry).toOpaque()
+        
+        return mango_player_initialize(player, cUri, nil, textureRegistryPtr)
+    }
+    
+    func play() {
+        guard let player = player else { return }
+        mango_player_play(player)
+    }
+    
+    func pause() {
+        guard let player = player else { return }
+        mango_player_pause(player)
+    }
+    
+    func stop() {
+        guard let player = player else { return }
+        mango_player_stop(player)
+    }
+    
+    func seek(to positionMs: Int64) {
+        guard let player = player else { return }
+        mango_player_seek(player, positionMs)
+    }
+    
+    func setVolume(_ volume: Double) {
+        guard let player = player else { return }
+        mango_player_set_volume(player, volume)
+    }
+    
+    func setMute(_ mute: Bool) {
+        guard let player = player else { return }
+        mango_player_set_mute(player, mute)
+    }
+    
+    func getPosition() -> Int64 {
+        guard let player = player else { return 0 }
+        return mango_player_get_position(player)
+    }
+    
+    func getDuration() -> Int64 {
+        guard let player = player else { return 0 }
+        return mango_player_get_duration(player)
+    }
+    
+    func getTextureId() -> Int64 {
+        guard let player = player else { return -1 }
+        return mango_player_get_texture_id(player)
+    }
+    
+    private func destroy() {
+        if let player = player {
+            mango_player_destroy(player)
+            self.player = nil
+        }
+        
+        if let hwDecoder = hwDecoder {
+            mango_destroy_videotoolbox_decoder(hwDecoder)
+            self.hwDecoder = nil
+        }
+        
+        if let textureOutput = textureOutput {
+            mango_destroy_metal_texture_output(textureOutput)
+            self.textureOutput = nil
+        }
+        
+        if let audioOutput = audioOutput {
+            mango_destroy_avaudioengine_output(audioOutput)
+            self.audioOutput = nil
+        }
+    }
+}

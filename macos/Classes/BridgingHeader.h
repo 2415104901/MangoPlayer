@@ -22,4 +22,12 @@
 #import "core/FFmpegDemuxerObjC.h"
 #import "core/FFmpegAudioDecoderObjC.h"
 
+// Native Core C Bridge
+#import "mango_player/c_bridge/mango_player_c.h"
+
+// Native Core Platform Implementations
+#import "NativeCore/VideoToolboxDecoder.h"
+#import "NativeCore/MetalTextureOutput.h"
+#import "NativeCore/AVAudioEngineOutput.h"
+
 #endif /* MangoPlayer_BridgingHeader_h */

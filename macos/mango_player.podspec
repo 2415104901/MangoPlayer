@@ -16,10 +16,14 @@ Uses FFmpeg + VideoToolbox for hardware-accelerated decoding.
   s.author           = { 'MangoPlayer' => 'email@example.com' }
 
   s.source           = { :path => '.' }
-  s.source_files     = 'Classes/**/*.{swift,h,m}'
-  s.public_header_files = 'Classes/core/FFmpegDemuxerObjC.h', 'Classes/core/FFmpegAudioDecoderObjC.h'
-  s.preserve_paths = 'Classes/BridgingHeader.h', 'Classes/FFmpegWrapper.h', 'Classes/core/FFmpegDemuxerObjC.h', 'Classes/core/FFmpegAudioDecoderObjC.h'
+  s.source_files     = 'Classes/**/*.{swift,h,m,mm}', 'Classes/**/*.{swift,h,m,mm}'
+  s.exclude_files    = 'Classes/**/*.template'
+  s.public_header_files = 'Classes/core/FFmpegDemuxerObjC.h', 'Classes/core/FFmpegAudioDecoderObjC.h', 'Classes/NativeCore/*.h'
+  s.preserve_paths = 'Classes/BridgingHeader.h', 'Classes/FFmpegWrapper.h', 'Classes/core/FFmpegDemuxerObjC.h', 'Classes/core/FFmpegAudioDecoderObjC.h', 'Classes/NativeCore/*.h'
   s.dependency 'FlutterMacOS'
+  
+  # Link native_core static library
+  s.vendored_libraries = '../native_core/build/libmango_player_native_core.a', '../native_core/build/libmango_player_c_bridge.a'
 
   s.platform = :osx, '10.14'
   s.swift_version = '5.9'
@@ -29,14 +33,16 @@ Uses FFmpeg + VideoToolbox for hardware-accelerated decoding.
 
   # FFmpeg configuration using system-installed libraries via Homebrew
   s.xcconfig = {
-    'OTHER_CFLAGS' => '$(inherited) -I/opt/homebrew/Cellar/ffmpeg/8.0.1/include',
+    'OTHER_CFLAGS' => '$(inherited) -I/opt/homebrew/Cellar/ffmpeg/8.0.1/include -I$(PODS_TARGET_SRCROOT)/../native_core/include',
     'OTHER_LDFLAGS' => '$(inherited) -L/opt/homebrew/Cellar/ffmpeg/8.0.1/lib -lavformat -lavcodec -lavutil -lswscale -lswresample',
+    'HEADER_SEARCH_PATHS' => '$(inherited) $(PODS_TARGET_SRCROOT)/../native_core/include',
   }
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'CLANG_ENABLE_MODULES' => 'YES',
-    'OTHER_CFLAGS' => '$(inherited) -I/opt/homebrew/Cellar/ffmpeg/8.0.1/include -fmodules',
+    'OTHER_CFLAGS' => '$(inherited) -I/opt/homebrew/Cellar/ffmpeg/8.0.1/include -I$(PODS_TARGET_SRCROOT)/../native_core/include -fmodules',
     'OTHER_LDFLAGS' => '$(inherited) -L/opt/homebrew/Cellar/ffmpeg/8.0.1/lib -lavformat -lavcodec -lavutil -lswscale -lswresample -Wl,-rpath,/opt/homebrew/Cellar/ffmpeg/8.0.1/lib',
+    'HEADER_SEARCH_PATHS' => '$(inherited) $(PODS_TARGET_SRCROOT)/../native_core/include',
   }
 end

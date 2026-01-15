@@ -18,8 +18,11 @@
 struct AVCodecContext;
 struct AVPacket;
 struct AVFrame;
-enum AVCodecID;
-enum AVPixelFormat;
+
+// Include FFmpeg enums directly (can't forward declare enums in C++)
+extern "C" {
+#include <libavcodec/avcodec.h>
+}
 
 namespace mango_player {
 

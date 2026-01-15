@@ -104,6 +104,8 @@ target_include_directories(mango_player_c_bridge
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${FFMPEG_INCLUDE_DIRS}
 )
 
 # =============================================================================
