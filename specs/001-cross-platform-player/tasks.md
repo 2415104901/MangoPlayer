@@ -30,6 +30,8 @@ description: "MangoPlayer 功能实现任务列表"
 
 **背景**: 原设计要求 `native_core/` C++ 代码在 Windows/macOS 间共享，但实际 macOS 用 ObjC/Swift 重写导致代码重复。现已创建正确的 `native_core/` 架构。
 
+**详细迁移计划**: 参见 [docs/NATIVE_CORE_MIGRATION_PLAN.md](../../docs/NATIVE_CORE_MIGRATION_PLAN.md)
+
 ### 已完成的架构更新
 - [x] T-ARCH-001 创建 `native_core/` 根目录结构和 CMakeLists.txt
 - [x] T-ARCH-002 创建跨平台类型定义 `native_core/include/mango_player/types.h`
@@ -38,19 +40,45 @@ description: "MangoPlayer 功能实现任务列表"
 - [x] T-ARCH-005 创建 C 桥接层 `native_core/include/mango_player/c_bridge/mango_player_c.h`
 - [x] T-ARCH-006 实现跨平台源文件 (`src/*.cpp`)
 
-### 待完成的重构任务
-- [ ] T-ARCH-007 macOS: 创建 `VideoToolboxDecoder` 实现 `IHardwareDecoder` 接口
-- [ ] T-ARCH-008 macOS: 创建 `MetalTextureOutput` 实现 `ITextureOutput` 接口
-- [ ] T-ARCH-009 macOS: 创建 `AVAudioEngineOutput` 实现 `IAudioOutput` 接口
-- [ ] T-ARCH-010 macOS: 重构 `FFmpegPlayerManager.swift` 使用 `native_core` C 桥接
-- [ ] T-ARCH-011 Windows: 创建 `DXVADecoder` 实现 `IHardwareDecoder` 接口
-- [ ] T-ARCH-012 Windows: 创建 `D3D11TextureOutput` 实现 `ITextureOutput` 接口
-- [ ] T-ARCH-013 Windows: 创建 `WASAPIAudioOutput` 实现 `IAudioOutput` 接口
-- [ ] T-ARCH-014 Windows: 重构 `FFmpegPlayerManager` 使用共享 `native_core`
-- [ ] T-ARCH-015 删除 macOS 重复代码 (`FFmpegDemuxerObjC.m`, `ClockSync.swift` 等)
-- [ ] T-ARCH-016 删除 Windows 旧 `native_core/` 目录，改用根目录共享版本
-- [ ] T-ARCH-017 更新 macOS `mango_player.podspec` 链接 `native_core` 静态库
-- [ ] T-ARCH-018 更新 Windows `CMakeLists.txt` 链接 `native_core` 静态库
+### 待完成的重构任务 - 构建配置 (阻塞前置)
+- [x] T-ARCH-017 更新 `macos/mango_player.podspec`: 编译 native_core 源文件, 启用 C++17, 配置 FFmpeg 头/库路径
+- [x] T-ARCH-018 更新 `windows/CMakeLists.txt`: 链接 native_core 静态库, 同步 C++17 与 FFmpeg 依赖
+- [ ] T-ARCH-019 [NEW] 在 `macos/Classes/BridgingHeader.h` 引入 `mango_player/c_bridge/mango_player_c.h`, 为 ObjC++ 配置编译选项
+- [ ] T-ARCH-020 [NEW] 补充 `docs/NATIVE_CORE_MIGRATION_PLAN.md` 的桌面端依赖安装与构建指引
+
+### 待完成的重构任务 - C 桥接与包装层
+- [ ] T-ARCH-021 [NEW] 新建 `macos/Classes/Core/MangoPlayerCore.swift`: 管理 C 桥接句柄 (create/initialize/play/pause/seek/stop/dispose) 并缓存 TextureRegistry
+- [ ] T-ARCH-022 [NEW] 新建 `macos/Classes/Core/MangoPlayerCoreFactory.mm`: 构造平台实现实例并传递给 `mango_player_create`
+- [x] T-ARCH-023 [NEW] 新建 `windows/src/core/player_core_bridge.cpp`: 封装 PlayerCore 生命周期、事件回调和纹理访问接口
+- [x] T-ARCH-024 [NEW] 在 `windows/src/core/ffmpeg_player_manager.h` 引入桥接头文件, 准备替换现有私有成员
+
+### 待完成的重构任务 - macOS 平台实现
+- [ ] T-ARCH-007 macOS: 在 `macos/Classes/NativeCore/VideoToolboxHWDecoder.mm` 实现 `IHardwareDecoder` 接口 (H.264/H.265, 硬件像素格式)
+- [ ] T-ARCH-008 macOS: 在 `macos/Classes/NativeCore/MetalTextureOutput.mm` 实现 `ITextureOutput` 接口 (AVFrame -> CVPixelBuffer/MetalTexture 转换)
+- [ ] T-ARCH-009 macOS: 在 `macos/Classes/NativeCore/AVAudioEngineOutput.mm` 实现 `IAudioOutput` 接口 (PCM 写入, 音量/静音, 延迟查询)
+- [ ] T-ARCH-025 [NEW] 更新 `macos/Classes/Core/MangoPlayerCoreFactory.mm`: 注入 T-ARCH-007~009 的实现并映射错误到 EventBridge
+- [ ] T-ARCH-010 macOS: 重构 `macos/Classes/core/FFmpegPlayerManager.swift` 委托 MangoPlayerCore, 移除冗余解复用/解码/同步逻辑
+- [ ] T-ARCH-015 删除被 native_core 取代的旧文件 (`FFmpegDemuxerObjC.m`, `ClockSync.swift`, `macos/Classes/core/native_core/` 拷贝), 清理 Xcode 工程引用
+- [ ] T-ARCH-026 [NEW] 调整 `macos/Classes/Platform/EventChannelHandler.swift` 事件映射, 确保 PlayerEvent 字段与 Dart 契约对齐
+
+### 待完成的重构任务 - Windows 平台实现
+- [x] T-ARCH-011 Windows: 在 `windows/src/decoder/dxva_decoder.cpp` 实现 `IHardwareDecoder` 接口 (DXVA2 解码器)
+- [x] T-ARCH-012 Windows: 在 `windows/src/renderer/d3d11_texture_output.cpp` 实现 `ITextureOutput` 接口 (纹理池 + Flutter TextureRegistrar)
+- [x] T-ARCH-013 Windows: 在 `windows/src/core/wasapi_audio_output.cpp` 实现 `IAudioOutput` 接口 (WASAPI 音频输出)
+- [x] T-ARCH-027 [NEW] 更新 `windows/src/core/player_core_bridge.cpp`: 注册 T-ARCH-011~013 的实现并将事件转发给 EventChannelHandler
+- [x] T-ARCH-014 Windows: 重构 `windows/src/core/ffmpeg_player_manager.cpp` 直接管理 PlayerCore 实例, 移除重复代码
+- [x] T-ARCH-016 删除 Windows 旧 `windows/src/core/native_core/` 目录, 改用根目录共享版本
+
+### 待完成的重构任务 - 验证与文档
+- [ ] T-ARCH-028 [NEW] 扩充 `example/test/integration/cross_platform_test.dart` 断言, 覆盖 macOS 与 Windows 的播放状态、seek 完成与事件顺序
+- [ ] T-ARCH-029 [NEW] 更新 `docs/NATIVE_CORE_MIGRATION_PLAN.md` 记录迁移结果、已知问题与回归测试步骤
+- [ ] T-ARCH-030 [NEW] 运行跨平台冒烟测试并在 `docs/FORMAT_SUPPORT.md` 记录 macOS/Windows 支持状态
+
+### 架构重构执行顺序
+1. **构建配置** (T-ARCH-017~020) - 阻塞所有后续任务
+2. **桥接层** (T-ARCH-021~024) - 阻塞平台实现
+3. **macOS 实现** (T-ARCH-007~010, 015, 025~026) 与 **Windows 实现** (T-ARCH-011~014, 016, 027) - 可并行
+4. **验证与文档** (T-ARCH-028~030) - 等待两平台完成后执行
 
 ---
 
@@ -495,11 +523,10 @@ description: "MangoPlayer 功能实现任务列表"
 - [ ] 零拷贝效率验证 (内存带宽节省 >50%)
 
 #### 技术债务
-- [ ] **🔴 架构偏离: native_core C++ 复用未实现**
-  - Windows 有 `native_core/` C++ 实现 ✅
-  - macOS 用 Swift/ObjC 重写了相同逻辑 ⛔ (应改为调用共享 C++)
-  - 需要重构: 提取共享 `native_core/` 到项目根目录
-- [ ] macOS FFmpeg 路径硬编码问题（/opt/homebrew/Cellar/ffmpeg/8.0.1）
+- [x] **🟢 架构偏离: native_core C++ 复用** - 已有解决方案
+  - ✅ 已创建根目录 `native_core/` 共享架构 (T-ARCH-001~006)
+  - ⏳ 待执行迁移任务 (T-ARCH-007~030), 详见 [docs/NATIVE_CORE_MIGRATION_PLAN.md](../../docs/NATIVE_CORE_MIGRATION_PLAN.md)
+- [ ] macOS FFmpeg 路径硬编码问题（/opt/homebrew/Cellar/ffmpeg/8.0.1）→ T-ARCH-017 会处理
 - [ ] 多实例播放资源管理测试
 - [ ] Seek 后短暂卡顿优化
 - [ ] 日志系统统一（各平台格式/级别）
@@ -510,6 +537,13 @@ description: "MangoPlayer 功能实现任务列表"
 ---
 
 ## 下一步建议
+
+### 🔥 当前优先: native_core 迁移 (阻塞 US2 跨平台一致性)
+1. **构建配置** - T-ARCH-017~020 (阻塞所有后续任务)
+2. **桥接层搭建** - T-ARCH-021~024 (阻塞平台实现)
+3. **macOS 实现** - T-ARCH-007~010, 015, 025~026
+4. **Windows 实现** - T-ARCH-011~014, 016, 027 (可与 macOS 并行)
+5. **验证与文档** - T-ARCH-028~030
 
 ### 短期目标 (1-2 周)
 1. **iOS 平台验证** - 确认 ijkplayer 音视频播放正常 (T038-T047)
@@ -620,6 +654,7 @@ T014: "验证 FFmpeg 在 macOS 上编译"
 
 | 阶段 | 任务数 | 描述 |
 |------|--------|------|
+| **架构重构** | **24** | **T-ARCH-007~030 (6 已完成, 24 待完成)** |
 | 阶段 1 | 8 | 设置 |
 | 阶段 2 | 17 | 基础 (POC + Dart 核心) |
 | 阶段 3 | 22 | US1 基础播放 (MVP) |
@@ -631,12 +666,13 @@ T014: "验证 FFmpeg 在 macOS 上编译"
 | 阶段 9 | 6 | US7 性能监控 |
 | 阶段 10 | 2 | US8-9 预留 |
 | 阶段 11 | 17 | 完善 |
-| **总计** | **141** | |
+| **总计** | **165** | **(含架构重构 24 项)** |
 
 ### MVP 范围 (建议)
 
-- 阶段 1-4: 72 任务 → 4 平台基础播放
-- 预估工作量: 4-6 周 (2-3 人团队)
+- **当前阻塞**: 架构重构任务 (T-ARCH-017~030) 阻塞 US2 跨平台一致性
+- 阶段 1-4 + 架构重构: ~96 任务 → 4 平台基础播放
+- 预估工作量: 5-7 周 (2-3 人团队)
 
 ---
 

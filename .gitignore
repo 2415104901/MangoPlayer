@@ -4,6 +4,8 @@
 .pub/
 build/
 ios/.generated/
+.specify/
+specs/
 packages
 .flutter-plugins
 .flutter-plugins-dependencies
